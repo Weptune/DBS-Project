@@ -39,6 +39,7 @@ SELECT p.Post_ID, p.Post_Content, COUNT(pl.Liked_User_ID) AS Like_Count
 FROM posts p
 LEFT JOIN post_likes pl ON p.Post_ID = pl.Post_ID
 GROUP BY p.Post_ID, p.Post_Content;
+ORDER BY Like_Count DESC;
 
 7. Retrieve all comments along with the number of likes each comment has received
 
