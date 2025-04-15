@@ -1,0 +1,143 @@
+1.	Trigger: Auto-generate a unique Post ID using a sequence when a new post is inserted
+
+CREATE SEQUENCE post_id_seq START WITH 1000 INCREMENT BY 1;
+CREATE OR REPLACE TRIGGER trg_post_autoid
+BEFORE INSERT ON posts
+FOR EACH ROW
+BEGIN
+  SELECT post_id_seq.NEXTVAL INTO :NEW.Post_ID FROM dual;
+END;
+
+2.	Function: Get total number of friends for a user
+
+CREATE OR REPLACE FUNCTION get_friend_count(p_user_id INT)
+RETURN INT IS
+  v_count INT;
+BEGIN
+  SELECT COUNT(*) INTO v_count FROM friends WHERE User_ID = p_user_id;
+  RETURN v_count;
+END;
+
+SELECT get_friend_count(1) AS total_friends FROM dual;
+
+3.	Procedure: Display all posts and comments by a user using explicit cursors
+
+CREATE OR REPLACE PROCEDURE show_user_activity(p_user_id INT) IS
+  CURSOR post_cur IS
+    SELECT Post_ID, Post_Content, Post_Date FROM posts WHERE Posted_User_ID = p_user_id 
+  CURSOR comment_cur(v_post_id INT) IS
+    SELECT Comment_Content FROM post_comments WHERE Post_ID = v_post_id;
+BEGIN
+  FOR post_rec IN post_cur LOOP
+    DBMS_OUTPUT.PUT_LINE('Post ID: ' || post_rec.Post_ID || ' - ' || post_rec.Post_Content || ' on ' || post_rec.Post_Date);
+    FOR comment_rec IN comment_cur(post_rec.Post_ID) LOOP
+      DBMS_OUTPUT.PUT_LINE('   Comment: ' || comment_rec.Comment_Content);
+    END LOOP;
+  END LOOP;
+END;
+
+BEGIN
+  show_user_activity(1);
+END;
+
+4.	Procedure: Suggest friends (not already connected)
+
+CREATE OR REPLACE PROCEDURE suggest_friends(p_user_id INT) IS
+BEGIN
+  FOR rec IN (
+    SELECT u.User_ID, u.First_name || ' ' || u.Last_name AS name
+    FROM users u
+    WHERE u.User_ID != p_user_id
+      AND u.User_ID NOT IN (
+        SELECT Friend_ID FROM friends WHERE User_ID = p_user_id
+      )
+  ) LOOP
+    DBMS_OUTPUT.PUT_LINE('Suggested Friend: ' || rec.name || ' (User_ID: ' || rec.User_ID || ')');
+  END LOOP;
+END;
+
+BEGIN
+  suggest_friends(1);
+END;
+
+5.	Trigger: Validate phone number length on user insert/update
+
+CREATE OR REPLACE TRIGGER trg_validate_phone
+BEFORE INSERT OR UPDATE ON users
+FOR EACH ROW
+BEGIN
+  IF LENGTH(:NEW.Phone_No) != 10 THEN
+    RAISE_APPLICATION_ERROR(-20002, 'Phone number must be 10 digits');
+  END IF;
+END;
+
+6.	Function: Return the number of likes, shares, and comments on a post
+
+CREATE OR REPLACE FUNCTION get_post_engagement(p_post_id INT)
+RETURN VARCHAR2 IS
+  v_likes INT;
+  v_shares INT;
+  v_comments INT;
+BEGIN
+  SELECT COUNT(*) INTO v_likes FROM post_likes WHERE Post_ID = p_post_id;
+  SELECT COUNT(*) INTO v_shares FROM post_shares WHERE Post_ID = p_post_id;
+  SELECT COUNT(*) INTO v_comments FROM post_comments WHERE Post_ID = p_post_id;
+  RETURN 'Likes: ' || v_likes || ', Shares: ' || v_shares || ', Comments: ' || v_comments;
+END;
+
+SELECT get_post_engagement(101) FROM dual;
+
+7.	Function: Check if two users are friends
+
+CREATE OR REPLACE FUNCTION are_friends(p_user1 INT, p_user2 INT)
+RETURN VARCHAR2 IS
+  v_exists INT;
+BEGIN
+  SELECT COUNT(*) INTO v_exists
+  FROM friends
+  WHERE (User_ID = p_user1 AND Friend_ID = p_user2)
+     OR (User_ID = p_user2 AND Friend_ID = p_user1);
+  IF v_exists > 0 THEN
+    RETURN 'Yes';
+  ELSE
+    RETURN 'No';
+  END IF;
+END;
+
+8.	Procedure: Delete all user data (posts, likes, comments)
+
+CREATE OR REPLACE PROCEDURE delete_user_data(p_user_id INT) IS
+BEGIN
+  DELETE FROM comments_like WHERE Comment_ID IN (
+    SELECT Comment_ID FROM post_comments WHERE Commented_User_ID = p_user_id
+  );
+  DELETE FROM post_comments WHERE Commented_User_ID = p_user_id;
+  DELETE FROM post_likes WHERE Liked_User_ID = p_user_id;
+  DELETE FROM post_shares WHERE Shared_User_ID = p_user_id;
+  DELETE FROM posts WHERE Posted_User_ID = p_user_id;
+  DELETE FROM friends WHERE User_ID = p_user_id OR Friend_ID = p_user_id;
+  DELETE FROM page_likes WHERE Page_User_ID = p_user_id;
+  DELETE FROM users WHERE User_ID = p_user_id;
+  DBMS_OUTPUT.PUT_LINE('All data for User_ID ' || p_user_id || ' deleted.');
+END;
+
+9.	Trigger: Auto-like a post when it’s shared
+
+CREATE OR REPLACE TRIGGER trg_auto_like_on_share
+AFTER INSERT ON post_shares
+FOR EACH ROW
+BEGIN
+  INSERT INTO post_likes (Post_ID, Liked_User_ID)
+  VALUES (:NEW.Post_ID, :NEW.Shared_User_ID);
+END;
+
+10.	Trigger: Enforce password strength rule
+
+CREATE OR REPLACE TRIGGER trg_password_strength
+BEFORE INSERT OR UPDATE ON users
+FOR EACH ROW
+BEGIN
+  IF LENGTH(:NEW.Pass_word) < 6 THEN
+    RAISE_APPLICATION_ERROR(-20003, 'Password must be at least 6 characters.');
+  END IF;
+END;
