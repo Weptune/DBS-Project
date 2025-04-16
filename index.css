@@ -98,3 +98,36 @@ code {
   font-size: 0.85rem;
   color: #888;
 }
+
+.create-post {
+  margin-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.create-post textarea {
+  resize: vertical;
+  min-height: 80px;
+  padding: 10px;
+  font-size: 1rem;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background-color: #f9f9f9;
+}
+
+.dark-mode .create-post textarea {
+  background-color: #2a2a2a;
+  color: #fff;
+  border-color: #444;
+}
+
+.create-post button {
+  align-self: flex-end;
+  background-color: #28a745;
+  color: white;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
