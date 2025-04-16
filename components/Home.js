@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import '../App.css'; // make sure path is correct
+import '../App.css';
 
 const Home = () => {
   const [posts, setPosts] = useState([]);
   const [commentInputs, setCommentInputs] = useState({});
+  const [newPostContent, setNewPostContent] = useState('');
   const [darkMode, setDarkMode] = useState(false);
   const userId = 1;
 
@@ -44,6 +45,20 @@ const Home = () => {
       .catch(err => console.error('Error adding comment:', err));
   };
 
+  const handleCreatePost = () => {
+    if (!newPostContent.trim()) return;
+
+    axios.post('http://localhost:3001/api/posts/create', {
+      userId,
+      content: newPostContent,
+    })
+      .then(() => {
+        fetchPosts();
+        setNewPostContent('');
+      })
+      .catch(err => console.error('Error creating post:', err));
+  };
+
   return (
     <div className="home-container">
       <button className="toggle-btn" onClick={() => setDarkMode(!darkMode)}>
@@ -52,6 +67,17 @@ const Home = () => {
 
       <h1 className="heading">News Feed</h1>
 
+      {/* Create Post Section */}
+      <div className="post-card create-post">
+        <textarea
+          placeholder="What's on your mind?"
+          value={newPostContent}
+          onChange={(e) => setNewPostContent(e.target.value)}
+        />
+        <button onClick={handleCreatePost}>Post</button>
+      </div>
+
+      {/* Post Feed */}
       {posts.length === 0 ? (
         <p>No posts to display.</p>
       ) : (
