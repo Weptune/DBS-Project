@@ -11,7 +11,6 @@ const dbConfig = {
 // Fetch all posts
 router.get('/all', async (req, res) => {
   let connection;
-
   try {
     connection = await oracledb.getConnection(dbConfig);
 
@@ -26,14 +25,38 @@ router.get('/all', async (req, res) => {
       ORDER BY p.Post_Date DESC
     `, [], { outFormat: oracledb.OUT_FORMAT_OBJECT });
 
-    const formattedPosts = result.rows.map(row => ({
-      postId: row.POST_ID,
-      postedBy: row.POSTED_BY,
-      date: row.POST_DATE,
-      content: row.POST_CONTENT,
-      likeCount: row.LIKE_COUNT,
-      commentCount: row.COMMENT_COUNT
-    }));
+    const formattedPosts = [];
+
+    for (const row of result.rows) {
+      const post = {
+        postId: row.POST_ID,
+        postedBy: row.POSTED_BY,
+        date: row.POST_DATE,
+        content: row.POST_CONTENT,
+        likeCount: row.LIKE_COUNT,
+        commentCount: row.COMMENT_COUNT,
+        comments: []
+      };
+
+      const commentsRes = await connection.execute(
+        `SELECT c.Comment_Content, TO_CHAR(c.Commented_Date, 'YYYY-MM-DD') AS Commented_Date, 
+                u.First_Name || ' ' || u.Last_Name AS Commented_By
+         FROM post_comments c
+         JOIN users u ON c.Commented_User_ID = u.User_ID
+         WHERE c.Post_ID = :postId
+         ORDER BY c.Commented_Date DESC FETCH FIRST 3 ROWS ONLY`,
+        [post.postId],
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+
+      post.comments = commentsRes.rows.map(row => ({
+        content: row.COMMENT_CONTENT,
+        date: row.COMMENTED_DATE,
+        user: row.COMMENTED_BY
+      }));
+
+      formattedPosts.push(post);
+    }
 
     res.json(formattedPosts);
 
@@ -52,6 +75,15 @@ router.post('/like', async (req, res) => {
 
   try {
     connection = await oracledb.getConnection(dbConfig);
+
+    const existing = await connection.execute(
+      `SELECT 1 FROM post_likes WHERE Post_ID = :postId AND Liked_User_ID = :userId`,
+      [postId, userId]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ message: 'Already liked' });
+    }
+
     await connection.execute(
       `INSERT INTO post_likes (Post_ID, Liked_User_ID) VALUES (:postId, :userId)`,
       [postId, userId],
@@ -91,6 +123,33 @@ router.post('/comment', async (req, res) => {
   } catch (err) {
     console.error('Error adding comment:', err);
     res.status(500).json({ message: 'Failed to add comment', error: err.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// Create a new post
+router.post('/create', async (req, res) => {
+  const { userId, content } = req.body;
+  if (!userId || !content) return res.status(400).json({ message: 'Missing data' });
+
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(`SELECT NVL(MAX(Post_ID), 0) + 1 FROM posts`);
+    const newId = result.rows[0][0];
+
+    await connection.execute(
+      `INSERT INTO posts (Post_ID, Posted_User_ID, Post_Date, Post_Content)
+       VALUES (:id, :userId, SYSDATE, :content)`,
+      [newId, userId, content],
+      { autoCommit: true }
+    );
+
+    res.json({ message: 'Post created' });
+  } catch (err) {
+    console.error('Error creating post:', err);
+    res.status(500).json({ message: 'Failed to create post', error: err.message });
   } finally {
     if (connection) await connection.close();
   }
