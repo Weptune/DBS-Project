@@ -15,10 +15,13 @@ router.get('/all', async (req, res) => {
     connection = await oracledb.getConnection(dbConfig);
 
     const result = await connection.execute(`
-      SELECT p.Post_ID, u.Name AS Posted_By, TO_CHAR(p.Post_Date, 'YYYY-MM-DD') AS Post_Date,
-             p.Post_Content,
-             (SELECT COUNT(*) FROM likes l WHERE l.Post_ID = p.Post_ID) AS Like_Count,
-             (SELECT COUNT(*) FROM comments c WHERE c.Post_ID = p.Post_ID) AS Comment_Count
+      SELECT 
+        p.Post_ID, 
+        u.First_name || ' ' || u.Last_name AS Posted_By, 
+        TO_CHAR(p.Post_Date, 'YYYY-MM-DD') AS Post_Date, 
+        p.Post_Content,
+        (SELECT COUNT(*) FROM post_likes l WHERE l.Post_ID = p.Post_ID) AS Like_Count,
+        (SELECT COUNT(*) FROM post_comments c WHERE c.Post_ID = p.Post_ID) AS Comment_Count
       FROM posts p
       JOIN users u ON p.Posted_User_ID = u.User_ID
       ORDER BY p.Post_Date DESC
