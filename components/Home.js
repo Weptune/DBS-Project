@@ -1,14 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import '../App.css'; // make sure path is correct
 
 const Home = () => {
   const [posts, setPosts] = useState([]);
   const [commentInputs, setCommentInputs] = useState({});
-  const userId = 1; // Replace with actual logged-in user ID
+  const [darkMode, setDarkMode] = useState(false);
+  const userId = 1;
 
   useEffect(() => {
     fetchPosts();
   }, []);
+
+  useEffect(() => {
+    document.body.className = darkMode ? 'dark-mode' : '';
+  }, [darkMode]);
 
   const fetchPosts = () => {
     axios.get('http://localhost:3001/api/posts/all')
@@ -38,77 +44,37 @@ const Home = () => {
       .catch(err => console.error('Error adding comment:', err));
   };
 
-  const handleCreatePost = () => {
-    const content = commentInputs['newPost'];
-    if (!content) return;
-
-    axios.post('http://localhost:3001/api/posts/create', { userId, content })
-      .then(() => {
-        fetchPosts();
-        setCommentInputs(prev => ({ ...prev, newPost: '' }));
-      })
-      .catch(err => console.error('Error creating post:', err));
-  };
-
   return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">News Feed</h1>
+    <div className="home-container">
+      <button className="toggle-btn" onClick={() => setDarkMode(!darkMode)}>
+        {darkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
+      </button>
 
-      {/* Create New Post */}
-      <div className="bg-white p-4 rounded-xl shadow mb-6">
-        <textarea
-          rows="3"
-          placeholder="What's on your mind?"
-          className="w-full border rounded p-2"
-          value={commentInputs['newPost'] || ''}
-          onChange={(e) => handleCommentChange('newPost', e.target.value)}
-        />
-        <button
-          className="mt-2 bg-green-500 text-white px-3 py-1 rounded"
-          onClick={handleCreatePost}
-        >
-          Post
-        </button>
-      </div>
+      <h1 className="heading">News Feed</h1>
 
-      {/* All Posts */}
       {posts.length === 0 ? (
         <p>No posts to display.</p>
       ) : (
         posts.map(post => (
-          <div key={post.postId} className="bg-white p-4 rounded-xl shadow mb-6">
-            <h2 className="font-semibold text-lg">{post.postedBy}</h2>
-            <p className="text-gray-600">{post.date}</p>
-            <p className="mt-2 text-gray-800">{post.content}</p>
+          <div key={post.postId} className="post-card">
+            <h2>{post.postedBy}</h2>
+            <p className="date">{post.date}</p>
+            <p>{post.content}</p>
 
-            <div className="mt-3 text-sm text-gray-500 flex gap-4 items-center">
-              <button onClick={() => handleLike(post.postId)} className="hover:text-blue-600">👍 Like</button>
+            <div className="actions">
+              <button onClick={() => handleLike(post.postId)}>👍</button>
               <span>{post.likeCount}</span>
               <span>💬 {post.commentCount}</span>
             </div>
 
-            {/* Inline Comments */}
-            {post.comments && post.comments.map((c, i) => (
-              <div key={i} className="ml-3 mt-2 text-sm text-gray-700">
-                <strong>{c.user}</strong>: {c.content} <span className="text-xs text-gray-500">({c.date})</span>
-              </div>
-            ))}
-
-            {/* Comment Box */}
-            <div className="mt-3 flex gap-2">
+            <div className="comment-input">
               <input
                 type="text"
                 value={commentInputs[post.postId] || ''}
                 onChange={(e) => handleCommentChange(post.postId, e.target.value)}
                 placeholder="Write a comment..."
-                className="border p-1 rounded w-full"
               />
-              <button
-                onClick={() => handleCommentSubmit(post.postId)}
-                className="bg-blue-500 text-white px-2 py-1 rounded"
-              >
-                Post
-              </button>
+              <button onClick={() => handleCommentSubmit(post.postId)}>Post</button>
             </div>
           </div>
         ))
