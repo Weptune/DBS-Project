@@ -1,0 +1,65 @@
+1. Lock-Based Protocols
+
+We use Oracle's SELECT ... FOR UPDATE to lock rows during sensitive operations (e.g., updating likes or comments)
+eg: 
+BEGIN
+  SELECT like_count INTO :likeCount
+  FROM post_likes
+  WHERE post_id = :postId
+  FOR UPDATE;
+
+  UPDATE post_likes SET like_count = like_count + 1 WHERE post_id = :postId;
+  COMMIT;
+END;
+
+This prevents other transactions from modifying the same row until the lock is released (transaction is committed/rolled back)
+
+2. Deadlock Handling
+
+We set a timeout for transactions in Oracle or retry failed transactions and detect and log deadlock scenarios using Oracle error codes (e.g., ORA-00060: deadlock detected).
+
+eg:
+try {
+  await connection.execute("... FOR UPDATE");
+} catch (err) {
+  if (err.errorNum === 60) {
+    console.log("Deadlock detected. Retrying...");
+    // Retry logic or abort
+  }
+}
+
+3. Timestamp-Based Protocols
+
+We assign timestamps to each transaction and resolve conflicts based on timestamps (older transactions get priority)
+
+How to simulate:
+
+1) Store created_at and updated_at timestamps on posts/comments.
+2) Use custom logic to reject or allow operations based on timestamp comparisons.
+
+eg: 
+// If a client tries to edit a comment, check if their timestamp is older
+if (clientTimestamp < dbComment.updated_at) {
+  return res.status(409).json({ error: "Conflict: Comment was updated after you started editing." });
+}
+
+4. Validation-Based Protocols
+
+Validation-based (Optimistic Concurrency Control) assumes conflicts are rare and validates a transaction before committing.
+
+How to apply:
+When a user submits an edit, compare the current DB version of the row with what the user saw before editing.
+
+If there's a mismatch, abort and ask them to retry.
+
+eg:
+UPDATE posts
+SET content = :newContent, version = version + 1
+WHERE post_id = :postId AND version = :oldVersion;
+
+If affectedRows = 0, it means someone else modified the post — notify the user.
+
+
+
+
+
