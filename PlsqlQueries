@@ -1,143 +1,144 @@
-1.	Trigger: Auto-generate a unique Post ID using a sequence when a new post is inserted
-
-CREATE SEQUENCE post_id_seq START WITH 1000 INCREMENT BY 1;
-CREATE OR REPLACE TRIGGER trg_post_autoid
-BEFORE INSERT ON posts
-FOR EACH ROW
-BEGIN
-  SELECT post_id_seq.NEXTVAL INTO :NEW.Post_ID FROM dual;
-END;
-
-2.	Function: Get total number of friends for a user
-
-CREATE OR REPLACE FUNCTION get_friend_count(p_user_id INT)
-RETURN INT IS
-  v_count INT;
-BEGIN
-  SELECT COUNT(*) INTO v_count FROM friends WHERE User_ID = p_user_id;
-  RETURN v_count;
-END;
-
-SELECT get_friend_count(1) AS total_friends FROM dual;
-
-3.	Procedure: Display all posts and comments by a user using explicit cursors
-
-CREATE OR REPLACE PROCEDURE show_user_activity(p_user_id INT) IS
-  CURSOR post_cur IS
-    SELECT Post_ID, Post_Content, Post_Date FROM posts WHERE Posted_User_ID = p_user_id 
-  CURSOR comment_cur(v_post_id INT) IS
-    SELECT Comment_Content FROM post_comments WHERE Post_ID = v_post_id;
-BEGIN
-  FOR post_rec IN post_cur LOOP
-    DBMS_OUTPUT.PUT_LINE('Post ID: ' || post_rec.Post_ID || ' - ' || post_rec.Post_Content || ' on ' || post_rec.Post_Date);
-    FOR comment_rec IN comment_cur(post_rec.Post_ID) LOOP
-      DBMS_OUTPUT.PUT_LINE('   Comment: ' || comment_rec.Comment_Content);
-    END LOOP;
-  END LOOP;
-END;
+1. Display Total Number of Users
+SET SERVEROUTPUT ON;
 
 BEGIN
-  show_user_activity(1);
+  DECLARE
+    total_users NUMBER;
+  BEGIN
+    SELECT COUNT(*) INTO total_users FROM users;
+    DBMS_OUTPUT.PUT_LINE('Total Users: ' || total_users);
+  END;
 END;
+/
 
-4.	Procedure: Suggest friends (not already connected)
+2. Count Number of Posts Per User
+SET SERVEROUTPUT ON;
 
-CREATE OR REPLACE PROCEDURE suggest_friends(p_user_id INT) IS
 BEGIN
   FOR rec IN (
-    SELECT u.User_ID, u.First_name || ' ' || u.Last_name AS name
-    FROM users u
-    WHERE u.User_ID != p_user_id
-      AND u.User_ID NOT IN (
-        SELECT Friend_ID FROM friends WHERE User_ID = p_user_id
-      )
+    SELECT posted_user_id, COUNT(*) AS post_count
+    FROM posts
+    GROUP BY posted_user_id
   ) LOOP
-    DBMS_OUTPUT.PUT_LINE('Suggested Friend: ' || rec.name || ' (User_ID: ' || rec.User_ID || ')');
+    DBMS_OUTPUT.PUT_LINE('User ID ' || rec.posted_user_id || ' has ' || rec.post_count || ' posts.');
   END LOOP;
 END;
+/
+
+3. Show Users with More Than 1 Friend
+SET SERVEROUTPUT ON;
 
 BEGIN
-  suggest_friends(1);
+  FOR rec IN (
+    SELECT user_id, COUNT(*) AS friend_count
+    FROM friends
+    GROUP BY user_id
+    HAVING COUNT(*) > 1
+  ) LOOP
+    DBMS_OUTPUT.PUT_LINE('User ' || rec.user_id || ' has ' || rec.friend_count || ' friends.');
+  END LOOP;
 END;
+/
 
-5.	Trigger: Validate phone number length on user insert/update
+4. Show All Comments on a Specific Post ID (e.g., Post_ID = 1)
+SET SERVEROUTPUT ON;
 
-CREATE OR REPLACE TRIGGER trg_validate_phone
-BEFORE INSERT OR UPDATE ON users
-FOR EACH ROW
+DECLARE
+  v_post_id NUMBER := 1;
 BEGIN
-  IF LENGTH(:NEW.Phone_No) != 10 THEN
-    RAISE_APPLICATION_ERROR(-20002, 'Phone number must be 10 digits');
-  END IF;
+  FOR rec IN (
+    SELECT comment_content FROM post_comments WHERE post_id = v_post_id
+  ) LOOP
+    DBMS_OUTPUT.PUT_LINE('Comment: ' || rec.comment_content);
+  END LOOP;
 END;
+/
 
-6.	Function: Return the number of likes, shares, and comments on a post
+5. List All Users Who Have Liked a Post (e.g., Post_ID = 1)
+SET SERVEROUTPUT ON;
 
-CREATE OR REPLACE FUNCTION get_post_engagement(p_post_id INT)
-RETURN VARCHAR2 IS
-  v_likes INT;
-  v_shares INT;
-  v_comments INT;
+DECLARE
+  v_post_id NUMBER := 1000;
 BEGIN
-  SELECT COUNT(*) INTO v_likes FROM post_likes WHERE Post_ID = p_post_id;
-  SELECT COUNT(*) INTO v_shares FROM post_shares WHERE Post_ID = p_post_id;
-  SELECT COUNT(*) INTO v_comments FROM post_comments WHERE Post_ID = p_post_id;
-  RETURN 'Likes: ' || v_likes || ', Shares: ' || v_shares || ', Comments: ' || v_comments;
+  FOR rec IN (
+    SELECT liked_user_id FROM post_likes WHERE post_id = v_post_id
+  ) LOOP
+    DBMS_OUTPUT.PUT_LINE('Liked by user ID: ' || rec.liked_user_id);
+  END LOOP;
 END;
+/
 
-SELECT get_post_engagement(101) FROM dual;
+6. Find Most Recent Post by Any User
+SET SERVEROUTPUT ON;
 
-7.	Function: Check if two users are friends
-
-CREATE OR REPLACE FUNCTION are_friends(p_user1 INT, p_user2 INT)
-RETURN VARCHAR2 IS
-  v_exists INT;
+DECLARE
+  v_user_id users.user_id%TYPE;
+  v_content posts.post_content%TYPE;
+  v_date posts.post_date%TYPE;
 BEGIN
-  SELECT COUNT(*) INTO v_exists
-  FROM friends
-  WHERE (User_ID = p_user1 AND Friend_ID = p_user2)
-     OR (User_ID = p_user2 AND Friend_ID = p_user1);
-  IF v_exists > 0 THEN
-    RETURN 'Yes';
-  ELSE
-    RETURN 'No';
-  END IF;
+  SELECT posted_user_id, post_content, post_date
+  INTO v_user_id, v_content, v_date
+  FROM posts
+  WHERE post_date = (SELECT MAX(post_date) FROM posts);
+
+  DBMS_OUTPUT.PUT_LINE('Latest Post by User ' || v_user_id || ' on ' || v_date || ': ' || v_content);
 END;
+/
 
-8.	Procedure: Delete all user data (posts, likes, comments)
+7. Display Like Count for Each Post
+SET SERVEROUTPUT ON;
 
-CREATE OR REPLACE PROCEDURE delete_user_data(p_user_id INT) IS
 BEGIN
-  DELETE FROM comments_like WHERE Comment_ID IN (
-    SELECT Comment_ID FROM post_comments WHERE Commented_User_ID = p_user_id
-  );
-  DELETE FROM post_comments WHERE Commented_User_ID = p_user_id;
-  DELETE FROM post_likes WHERE Liked_User_ID = p_user_id;
-  DELETE FROM post_shares WHERE Shared_User_ID = p_user_id;
-  DELETE FROM posts WHERE Posted_User_ID = p_user_id;
-  DELETE FROM friends WHERE User_ID = p_user_id OR Friend_ID = p_user_id;
-  DELETE FROM page_likes WHERE Page_User_ID = p_user_id;
-  DELETE FROM users WHERE User_ID = p_user_id;
-  DBMS_OUTPUT.PUT_LINE('All data for User_ID ' || p_user_id || ' deleted.');
+  FOR rec IN (
+    SELECT post_id, COUNT(*) AS like_count
+    FROM post_likes
+    GROUP BY post_id
+  ) LOOP
+    DBMS_OUTPUT.PUT_LINE('Post ID ' || rec.post_id || ' has ' || rec.like_count || ' likes.');
+  END LOOP;
 END;
+/
 
-9.	Trigger: Auto-like a post when it’s shared
+8. List Pages with More Than 1 Like
+SET SERVEROUTPUT ON;
 
-CREATE OR REPLACE TRIGGER trg_auto_like_on_share
-AFTER INSERT ON post_shares
-FOR EACH ROW
 BEGIN
-  INSERT INTO post_likes (Post_ID, Liked_User_ID)
-  VALUES (:NEW.Post_ID, :NEW.Shared_User_ID);
+  FOR rec IN (
+    SELECT page_id, COUNT(*) AS like_count
+    FROM page_likes
+    GROUP BY page_id
+    HAVING COUNT(*) > 1
+  ) LOOP
+    DBMS_OUTPUT.PUT_LINE('Page ID ' || rec.page_id || ' has ' || rec.like_count || ' likes.');
+  END LOOP;
 END;
+/
 
-10.	Trigger: Enforce password strength rule
+9. Display Full Name and Age of All Users
+SET SERVEROUTPUT ON;
 
-CREATE OR REPLACE TRIGGER trg_password_strength
-BEFORE INSERT OR UPDATE ON users
-FOR EACH ROW
 BEGIN
-  IF LENGTH(:NEW.Pass_word) < 6 THEN
-    RAISE_APPLICATION_ERROR(-20003, 'Password must be at least 6 characters.');
-  END IF;
+  FOR rec IN (
+    SELECT first_name, last_name, ROUND(MONTHS_BETWEEN(SYSDATE, dob) / 12) AS age
+    FROM users
+  ) LOOP
+    DBMS_OUTPUT.PUT_LINE(rec.first_name || ' ' || rec.last_name || ' is ' || rec.age || ' years old.');
+  END LOOP;
 END;
+/
+
+10. List Users Who Liked and Commented on the Same Post
+SET SERVEROUTPUT ON;
+
+BEGIN
+  FOR rec IN (
+    SELECT DISTINCT pl.liked_user_id
+    FROM post_likes pl
+    JOIN post_comments pc ON pl.post_id = pc.post_id
+    WHERE pl.liked_user_id = pc.commented_user_id
+  ) LOOP
+    DBMS_OUTPUT.PUT_LINE('User ID ' || rec.liked_user_id || ' liked and commented on the same post.');
+  END LOOP;
+END;
+/
+
